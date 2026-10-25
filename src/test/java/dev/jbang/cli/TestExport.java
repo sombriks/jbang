@@ -397,6 +397,22 @@ public class TestExport extends BaseTest {
 		assertThat(pom, not(containsString("<release>")));
 	}
 
+    @Test
+    void testExportIdeaProject() throws Exception {
+        String src = examplesTestFolder.resolve("classpath_log.java").toString();
+        File outFile = jbangTempDir.resolve("target").toFile();
+        outFile.mkdirs();
+        CaptureResult<Integer> result = checkedRun("export", "idea", "--force", "-O", outFile.toString(), src);
+        assertThat(result.result, equalTo(ExitException.EXIT_OK));
+        Path imlPath = outFile.toPath().resolve("classpath_log.iml");
+        assertThat(imlPath.toFile(), anExistingFile());
+
+        String iml = Util.readString(imlPath);
+        assertThat(iml, containsString(
+                "<orderEntry type=\"library\" name=\"Maven: log4j:log4j:1.2.17\" level=\"project\" />"));
+
+    }
+
 	@Test
 	void testExportMavenProjectWithPackages() throws Exception {
 		String src = examplesTestFolder.resolve("RootOne.java").toString();
