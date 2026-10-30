@@ -873,6 +873,16 @@ public class Export extends BaseCommand {
                     .render();
             Util.writeString(destination, result);
 
+            ResourceRef templateModuleRef = ResourceRef.forResource("classpath:/idea-modules.qute.xml");
+            Path moduleDestination = Paths.get(projectDir.toString(), ".idea", "modules.xml");
+            Util.mkdirs(moduleDestination.getParent());
+
+            Template templateModule = engine.getTemplate(templateModuleRef);
+            String resultModule = templateModule
+                    .data("iml", prj.getMainClass() + ".iml")
+                    .render();
+            Util.writeString(moduleDestination, resultModule);
+
         }
 
         @Override
