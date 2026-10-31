@@ -15,7 +15,9 @@ import org.aesh.command.CommandResult;
 import dev.jbang.catalog.Alias;
 import dev.jbang.catalog.Catalog;
 import dev.jbang.cli.JBang;
+import dev.jbang.cli.JBangDefaultValueProvider;
 import dev.jbang.search.SearchScorer;
+import dev.jbang.util.JavaUtil;
 import dev.jbang.util.Util;
 import dev.jbang.util.VersionChecker;
 
@@ -46,7 +48,7 @@ public class Main {
 			CommandResult result = AeshRuntimeRunner.builder()
 				.command(JBang.class)
 				.args(newArgs)
-				.defaultValueProvider(new dev.jbang.cli.JBangDefaultValueProvider())
+				.defaultValueProvider(new JBangDefaultValueProvider())
 				.execute();
 			if (result != null) {
 				exitCode = result.getResultValue();
@@ -123,7 +125,7 @@ public class Main {
 	 */
 	static void applyJavaOptionsFromEnv() {
 		// Only needed in native-image mode — on JVM the launcher handles -D flags
-		if (!dev.jbang.util.JavaUtil.inNativeImage()) {
+		if (!JavaUtil.inNativeImage()) {
 			return;
 		}
 		String opts = System.getenv("JBANG_JAVA_OPTIONS");
@@ -220,15 +222,16 @@ public class Main {
 					Util.verboseMsg("run plugin: " + cmdLine);
 					System.out.println(cmdLine);
 					throw new ExitException(ExitException.EXIT_EXECUTE, cmdLine);
-				}
-				// Before falling through to implicit "run", check if the
-				// command looks like a typo of a known subcommand. Only
-				// suggest if the input doesn't look like a file/script
-				// reference (no path separators, no extensions, no URLs).
-				String suggestion = findClosestSubcommand(cmd);
-				if (suggestion != null && !looksLikeScriptRef(cmd)) {
-					Util.warnMsg("'" + cmd + "' is not a jbang command. Did you mean '" + suggestion + "'?");
-					Util.infoMsg("See 'jbang --help' for available commands.");
+				} else {
+					// No alias or external command matched. Before falling through
+					// to implicit "run", check for a typo of a known subcommand. Only
+					// suggest if the input doesn't look like a file/script
+					// reference (no path separators, no extensions, no URLs).
+					String suggestion = findClosestSubcommand(cmd);
+					if (suggestion != null && !looksLikeScriptRef(cmd)) {
+						Util.warnMsg("'" + cmd + "' is not a jbang command. Did you mean '" + suggestion + "'?");
+						Util.infoMsg("See 'jbang --help' for available commands.");
+					}
 				}
 				// In all other cases assume it's an implicit "run"
 				List<String> jbangOpts = stripNonInheritedJBangOpts(leadingOpts);

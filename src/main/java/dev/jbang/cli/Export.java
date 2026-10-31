@@ -1,5 +1,7 @@
 package dev.jbang.cli;
 
+import static dev.jbang.Settings.CP_SEPARATOR;
+
 import dev.jbang.ExitException;
 import dev.jbang.catalog.Alias;
 import dev.jbang.catalog.CatalogUtil;
@@ -27,8 +29,6 @@ import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 
-import static dev.jbang.Settings.CP_SEPARATOR;
-
 @CommandDefinition(name = "export", description = "Export the result of a build or the set of the sources to a project.", groupCommands = {
         Export.ExportPortable.class, Export.ExportLocal.class, Export.ExportMavenPublish.class,
         Export.ExportNative.class, Export.ExportFatjar.class, Export.ExportJlink.class,
@@ -46,7 +46,7 @@ public class Export extends BaseCommand {
     static abstract class BaseExportCommand extends BaseBuildCommand {
 
         @Option(shortName = 'O', name = "output", description = "The name or path to use for the exported file.")
-        java.nio.file.Path outputFile;
+		Path outputFile;
 
         @Option(name = "force", hasValue = false, description = "Force export, i.e. overwrite exported file if already exists")
         boolean force;
@@ -835,7 +835,7 @@ public class Export extends BaseCommand {
         }
     }
 
-    @CommandDefinition(name = "idea", description = "Exports an Intellij IDEA  project", generateHelp = true)
+    @CommandDefinition(name = "idea", description = "Exports a standalone Intellij IDEA project", generateHelp = true)
     public static class ExportIdeaProject extends BaseExportProject {
         @Override
         String getType() {
@@ -843,11 +843,19 @@ public class Export extends BaseCommand {
         }
 
         @Override
+        void installWrapperFiles(BuildContext ctx, Path projectDir) throws IOException {
+
+        }
+
+        @Override
         void renderBuildFile(BuildContext ctx, Path projectDir) throws IOException {
             Project prj = ctx.getProject();
-            ResourceRef templateRef = ResourceRef.forResource("classpath:/idea-project.qute.xml");
-            Path destination = projectDir.resolve(prj.getMainClass() + ".iml");
+            Source.Type srcType = prj.getMainSource().getType();
+            if (!supportedSourceTypes.contains(srcType)) {
+                throw new ExitException(ExitException.EXIT_INVALID_INPUT, "Unsupported source type: " + srcType.name());
+            }
 
+            TemplateEngine engine = TemplateEngine.instance();
             List<MavenRepo> repositories = prj.getRepositories();
             List<String> dependencies = prj.getMainSourceSet().getDependencies();
             List<String> depIds = dependencies.stream()
@@ -858,37 +866,38 @@ public class Export extends BaseCommand {
                 prj.addRepository(DependencyUtil.toMavenRepo(DependencyUtil.ALIAS_JITPACK));
             }
 
-            TemplateEngine engine = TemplateEngine.instance();
-            Template template = engine.getTemplate(templateRef);
-            if (template == null)
-                throw new ExitException(ExitException.EXIT_INVALID_INPUT,
-                        "Could not locate template named: '" + templateRef + "'");
-            Source.Type srcType = prj.getMainSource().getType();
-            if (!supportedSourceTypes.contains(srcType)) {
-                throw new ExitException(ExitException.EXIT_INVALID_INPUT, "Unsupported source type: " + srcType.name());
+            ResourceRef imlRef = ResourceRef.forResource("classpath:/idea-project.qute.xml");
+            ResourceRef moduleRef = ResourceRef.forResource("classpath:/idea-modules.qute.xml");
+            ResourceRef libraryRef = ResourceRef.forResource("classpath:/idea-library.qute.xml");
+
+            Path ideaDestination = Paths.get(projectDir.toString(), ".idea");
+            if(!ideaDestination.toFile().exists()) {
+                Files.createDirectories(ideaDestination);
             }
 
-            String result = template
+            Path imlDestination = ideaDestination.resolve(prj.getMainClass() + ".iml");
+            Path moduleDestination = ideaDestination.resolve("modules.xnl");
+            Path libraryDestination = ideaDestination.resolve("library.xnl");
+
+            String imlResult = engine
+                    .getTemplate(imlRef)
                     .data("dependencies", depIds)
                     .render();
-            Util.writeString(destination, result);
+            Util.writeString(imlDestination, imlResult);
 
-            ResourceRef templateModuleRef = ResourceRef.forResource("classpath:/idea-modules.qute.xml");
-            Path moduleDestination = Paths.get(projectDir.toString(), ".idea", "modules.xml");
-            Util.mkdirs(moduleDestination.getParent());
-
-            Template templateModule = engine.getTemplate(templateModuleRef);
-            String resultModule = templateModule
+            String moduleResult = engine
+                    .getTemplate(moduleRef)
                     .data("iml", prj.getMainClass() + ".iml")
                     .render();
-            Util.writeString(moduleDestination, resultModule);
+            Util.writeString(moduleDestination, moduleResult);
 
+            String libraryResult = engine
+                    .getTemplate(libraryRef)
+                    .data("dependencies", depIds)
+                    .render();
+            Util.writeString(libraryDestination, libraryResult);
         }
 
-        @Override
-        void installWrapperFiles(BuildContext ctx, Path projectDir) throws IOException {
-
-        }
     }
 
 //    public static class ExportEclipseaProject extends BaseExportProject {}
